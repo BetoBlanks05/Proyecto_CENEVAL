@@ -69,8 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function submitAnswer(respuesta, btnSelected) {
         document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
-        
-        // Paso 3: Feedback visual de procesamiento
+
         btnSelected.classList.add('processing');
         btnSelected.innerText = 'Evaluando...';
 
@@ -81,14 +80,13 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .then(res => res.json())
         .then(data => {
-            // Restaurar estado del botón
             btnSelected.classList.remove('processing');
             btnSelected.innerText = respuesta;
             btnSelected.classList.add(data.correcta ? 'selected-correct' : 'selected-error');
             
             ui.feedbackPanel.className = `feedback-panel ${data.correcta ? 'correct' : 'error'}`;
             ui.feedbackPanel.innerHTML = `
-                <strong>${data.correcta ? '✅ Respuesta Correcta' : '❌ Respuesta Incorrecta'}</strong><br><br>
+                <strong>${data.correcta ? 'Respuesta Correcta' : 'Respuesta Incorrecta'}</strong><br><br>
                 ${data.feedback}
             `;
             ui.feedbackPanel.style.display = 'block';
@@ -105,7 +103,6 @@ document.addEventListener("DOMContentLoaded", () => {
         ui.progressBadge.innerText = "Completado";
         document.getElementById('progress-fill').style.width = `100%`;
 
-        // Paso 2: Cálculo de métricas
         const correctas = data.score;
         const incorrectas = data.total_preguntas - data.score;
 
@@ -130,7 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
             </div>
         `;
 
-        // PDF Update (incluye las métricas)
         document.getElementById('download-pdf').onclick = () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();

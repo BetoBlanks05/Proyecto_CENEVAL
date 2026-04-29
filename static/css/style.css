@@ -150,16 +150,13 @@ body {
     color: white;
 }
 
-/* --- PASO 1: BARRA DE PROGRESO --- */
 .progress-track { background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px; overflow: hidden; width: 100%; }
 .progress-fill { background: #38bdf8; width: 0%; height: 100%; transition: width 0.4s ease-out; }
 
-/* --- PASO 2: OPTIMIZACIÓN DE RESULTADOS --- */
 .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; margin-top: 1.5rem; }
 .metric-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 8px; }
 .metric-value { font-size: 1.8rem; font-weight: bold; }
 
-/* --- PASO 3: ESTADOS INTERACTIVOS (HOVER Y CLICK) --- */
 .option-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); position: relative; }
 .option-btn:hover:not(:disabled) { 
     transform: translateY(-2px); 
@@ -174,12 +171,11 @@ body {
     transform: scale(0.98); 
 }
 
-/* --- PASO 4: ACCESIBILIDAD Y CONTRASTE --- */
 .context-box { 
     background: #f1f5f9; 
     border-left: 4px solid #3b82f6; 
-    color: #0f172a; /* Color oscurecido para mejor lectura */
-    font-weight: 500; /* Mayor grosor tipográfico */
+    color: #0f172a;
+    font-weight: 500;
     font-size: 1.05rem;
 }
 
