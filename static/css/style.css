@@ -123,3 +123,63 @@ body {
 
 .hidden { display: none !important; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Botones de acción final */
+.results-actions {
+    justify-content: center;
+}
+
+.action-btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.action-btn:hover { transform: translateY(-2px); }
+
+.action-btn.restart {
+    background-color: #64748b;
+    color: white;
+}
+
+.action-btn.pdf {
+    background-color: #2563eb;
+    color: white;
+}
+
+/* --- PASO 1: BARRA DE PROGRESO --- */
+.progress-track { background: rgba(255,255,255,0.2); height: 8px; border-radius: 4px; overflow: hidden; width: 100%; }
+.progress-fill { background: #38bdf8; width: 0%; height: 100%; transition: width 0.4s ease-out; }
+
+/* --- PASO 2: OPTIMIZACIÓN DE RESULTADOS --- */
+.metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; margin-top: 1.5rem; }
+.metric-box { background: #f8fafc; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 8px; }
+.metric-value { font-size: 1.8rem; font-weight: bold; }
+
+/* --- PASO 3: ESTADOS INTERACTIVOS (HOVER Y CLICK) --- */
+.option-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); position: relative; }
+.option-btn:hover:not(:disabled) { 
+    transform: translateY(-2px); 
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); 
+    border-color: var(--secondary); 
+    background: #eff6ff; 
+}
+.option-btn.processing { 
+    background: #e2e8f0; 
+    border-color: #cbd5e1; 
+    color: #64748b; 
+    transform: scale(0.98); 
+}
+
+/* --- PASO 4: ACCESIBILIDAD Y CONTRASTE --- */
+.context-box { 
+    background: #f1f5f9; 
+    border-left: 4px solid #3b82f6; 
+    color: #0f172a; /* Color oscurecido para mejor lectura */
+    font-weight: 500; /* Mayor grosor tipográfico */
+    font-size: 1.05rem;
+}
+

@@ -45,7 +45,13 @@ document.addEventListener("DOMContentLoaded", () => {
         ui.topicTitle.innerText = data.tema;
         ui.progressBadge.innerText = data.progreso;
         
-        ui.diffBadge.innerText = `Nivel: ${data.dificultad}`;
+        // Paso 1: Lógica de la barra de progreso
+        const progressParts = data.progreso.split('/');
+        const currentQ = parseInt(progressParts[0]);
+        const totalQ = parseInt(progressParts[1]) || 30;
+        document.getElementById('progress-fill').style.width = `${(currentQ / totalQ) * 100}%`;
+        
+        ui.diffBadge.innerText = `Nivel: ${data.dificultad.toUpperCase()}`;
         ui.diffBadge.className = `diff-badge diff-${data.dificultad}`;
         ui.diffBadge.classList.remove('hidden');
 
@@ -63,6 +69,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function submitAnswer(respuesta, btnSelected) {
         document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+        
+        // Paso 3: Feedback visual de procesamiento
+        btnSelected.classList.add('processing');
+        btnSelected.innerText = 'Evaluando...';
 
         fetch('/api/answer', {
             method: 'POST',
@@ -71,13 +81,18 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .then(res => res.json())
         .then(data => {
+            // Restaurar estado del botón
+            btnSelected.classList.remove('processing');
+            btnSelected.innerText = respuesta;
             btnSelected.classList.add(data.correcta ? 'selected-correct' : 'selected-error');
+            
             ui.feedbackPanel.className = `feedback-panel ${data.correcta ? 'correct' : 'error'}`;
             ui.feedbackPanel.innerHTML = `
-                <strong>${data.correcta ? 'Respuesta Correcta' : 'Respuesta Incorrecta'}</strong><br><br>
+                <strong>${data.correcta ? '✅ Respuesta Correcta' : '❌ Respuesta Incorrecta'}</strong><br><br>
                 ${data.feedback}
             `;
             ui.feedbackPanel.style.display = 'block';
+
             ui.nextBtn.style.display = 'block';
             ui.nextBtn.onclick = fetchNextQuestion;
         });
@@ -88,18 +103,64 @@ document.addEventListener("DOMContentLoaded", () => {
         ui.resultsContent.classList.remove('hidden');
         ui.topicTitle.innerText = "Diagnóstico Final del Agente";
         ui.progressBadge.innerText = "Completado";
+        document.getElementById('progress-fill').style.width = `100%`;
 
-        ui.resultsContent.innerHTML = `
-            <div style="text-align:center; padding: 2rem;">
-                <h1 style="font-size: 3rem; color: var(--secondary); margin-bottom: 1rem;">${data.porcentaje}%</h1>
-                <p style="font-size: 1.2rem; margin-bottom: 2rem;">Preguntas evaluadas: ${data.total_preguntas}</p>
-                
-                <div class="feedback-panel correct" style="display:block; text-align:left;">
-                    <strong>Dictamen del Tutor Inteligente:</strong><br><br>
-                    ${data.comentario_desempeno}
+        // Paso 2: Cálculo de métricas
+        const correctas = data.score;
+        const incorrectas = data.total_preguntas - data.score;
+
+        document.getElementById('results-data').innerHTML = `
+            <h1 style="font-size: 3.5rem; color: var(--secondary); margin-bottom: 0.5rem;">${data.porcentaje}%</h1>
+            <p style="font-size: 1.1rem; color: #64748b;">Eficiencia de resolución</p>
+            
+            <div class="metrics-grid">
+                <div class="metric-box">
+                    <div class="metric-value" style="color: #166534;">${correctas}</div>
+                    <div style="font-size: 0.9rem; color: #64748b; font-weight: 500;">Aciertos</div>
+                </div>
+                <div class="metric-box">
+                    <div class="metric-value" style="color: #991b1b;">${incorrectas}</div>
+                    <div style="font-size: 0.9rem; color: #64748b; font-weight: 500;">Errores</div>
                 </div>
             </div>
+
+            <div class="feedback-panel correct" style="display:block; text-align:left; border-left: 5px solid #166534;">
+                <strong>Dictamen del Agente Inteligente:</strong><br><br>
+                ${data.comentario_desempeno}
+            </div>
         `;
+
+        // PDF Update (incluye las métricas)
+        document.getElementById('download-pdf').onclick = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(20);
+            doc.text("Reporte de Evaluación Inteligente", 20, 30);
+            
+            doc.setFontSize(12);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 20, 40);
+            doc.line(20, 45, 190, 45);
+
+            doc.setFont("helvetica", "bold");
+            doc.text("Resumen de Desempeño:", 20, 60);
+            doc.setFont("helvetica", "normal");
+            doc.text(`- Puntaje Final: ${data.porcentaje}%`, 25, 70);
+            doc.text(`- Total evaluadas: ${data.total_preguntas}`, 25, 80);
+            doc.text(`- Aciertos: ${correctas}`, 25, 90);
+            doc.text(`- Errores: ${incorrectas}`, 25, 100);
+
+            doc.setFont("helvetica", "bold");
+            doc.text("Dictamen del Agente Tutor:", 20, 120);
+            
+            doc.setFont("helvetica", "italic");
+            const splitText = doc.splitTextToSize(data.comentario_desempeno, 160);
+            doc.text(splitText, 25, 130);
+
+            doc.save("Resultado_Evaluacion_Tutor.pdf");
+        };
     }
 
     function resetUI() {
