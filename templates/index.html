@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tutor Inteligente - Evaluación Adaptativa</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="app-container">
+    
+    <header class="header">
+        <h2 id="topic-title">Inicializando Agente...</h2>
+        <span id="progress-badge" class="progress-badge">0/0</span>
+    </header>
+
+    <main class="content-area">
+        
+        <div id="main-content">
+            <div class="meta-info">
+                <span id="diff-badge" class="diff-badge hidden"></span>
+            </div>
+
+            <div id="context-box" class="context-box">Conectando con la base de conocimiento...</div>
+            <h3 id="question-text" class="question-text"></h3>
+            
+            <div id="options-grid" class="options-grid">
+                </div>
+
+            <div id="feedback-panel" class="feedback-panel"></div>
+            
+            <button id="next-btn" class="next-btn">Siguiente Pregunta</button>
+        </div>
+
+        <div id="results-content" class="hidden"></div>
+
+    </main>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
