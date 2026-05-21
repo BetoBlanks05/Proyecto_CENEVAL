@@ -17,17 +17,43 @@ import json
 app = Flask(__name__)
 app.secret_key = 'clave_secreta_prototipo'
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 def get_db_connection():
+    """Establece el puente entre el Motor de Inferencia y la Base de Conocimiento."""
     return mysql.connector.connect(
         host="localhost",
         user="root",
         password="200999",
         database="sistema_evaluacion"
     )
+
+@app.route('/')
+def index():
+    session['score'] = 0
+    session['total_preguntas'] = 0
+    session['tema_actual'] = 1
+    session['preguntas_tema'] = 0
+    session['dificultad'] = 'basico'
+    session['aciertos_seguidos'] = 0
+    session['historial'] = []
+    return render_template('index.html')
+
+def aplicar_reglas_inferencia():
+
+    aciertos_seguidos = session.get('aciertos_seguidos', 0)
+    dificultad_actual = session.get('dificultad', 'basico')
+    preguntas_tema = session.get('preguntas_tema', 0)
+    
+    # REGLA 1: Aumento de dificultad (Inferencia de nivel)
+    if aciertos_seguidos >= 3 and dificultad_actual == 'basico':
+        session['dificultad'] = 'avanzado'
+        session['aciertos_seguidos'] = 0
+    
+    # REGLA 2: Cambio de tema (Razonamiento por bloques)
+    if preguntas_tema >= 10:
+        session['tema_actual'] += 1
+        session['preguntas_tema'] = 0
+        session['dificultad'] = 'basico'
+        session['aciertos_seguidos'] = 0
 
 def obtener_ruta_aprendizaje():
     conn = get_db_connection()
@@ -145,6 +171,65 @@ def submit_answer():
         "estado_ronda": estado_ronda
     })
 
+@app.route('/test', methods=['GET', 'POST'])
+def test():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        # Procesar respuesta y actualizar hechos
+        id_p = request.form.get('id_pregunta')
+        resp_user = request.form.get('respuesta')
+        
+        cursor.execute("SELECT * FROM Pregunta WHERE id_pregunta = %s", (id_p,))
+        pregunta = cursor.fetchone()
+        
+        es_correcta = (resp_user == pregunta['respuesta_correcta'])
+        
+        # Actualización de hechos
+        session['total_preguntas'] += 1
+        session['preguntas_tema'] += 1
+        
+        if es_correcta:
+            session['score'] += 1
+            session['aciertos_seguidos'] += 1
+        else:
+            session['aciertos_seguidos'] = 0
+            
+        # Aplicar el motor de inferencia para la siguiente pregunta
+        aplicar_reglas_inferencia()
+        
+        # Guardar historial para el PDF final
+        session['historial'].append({
+            'pregunta': pregunta['texto_pregunta'],
+            'correcta': es_correcta,
+            'feedback': pregunta['feedback']
+        })
+
+    # Finalizar si llegamos al límite de 30 preguntas o temas
+    if session['total_preguntas'] >= 30 or session['tema_actual'] > 3:
+        return redirect(url_for('resultados'))
+
+    # Seleccionar siguiente pregunta basada en hechos actuales
+    cursor.execute("""
+        SELECT * FROM Pregunta 
+        WHERE id_tema = %s AND nivel_dificultad = %s 
+        ORDER BY RAND() LIMIT 1
+    """, (session['tema_actual'], session['dificultad']))
+    
+    nueva_pregunta = cursor.fetchone()
+    nueva_pregunta['opciones'] = json.loads(nueva_pregunta['opciones'])
+    
+    conn.close()
+    return render_template('test.html', pregunta=nueva_pregunta)
+
+@app.route('/resultados')
+def resultados():
+    # Razonamiento final y generación de dictamen
+    porcentaje = (session['score'] / 30) * 100
+    dictamen = "Sobresaliente" if porcentaje >= 90 else "Satisfactorio" if porcentaje >= 70 else "Aún no satisfactorio"
+    return render_template('resultados.html', score=session['score'], dictamen=dictamen)
+
 def evaluar_reglas_agente():
     # Avanza tema por racha
     if session['racha_aciertos'] >= 3:
@@ -154,11 +239,11 @@ def evaluar_reglas_agente():
         session['preguntas_ronda'] = 0
         return "avanza_tema"
 
-    # Heurística predictiva de ronda
+    # Heuristica predictiva de ronda
     preguntas_restantes = 5 - session['preguntas_ronda']
     max_racha_posible = session['racha_aciertos'] + preguntas_restantes
 
-    # Fallo rápido si imposible ganar
+    # Fallo rapido si imposible ganar
     if max_racha_posible < 3:
         session['preguntas_ronda'] = 0
         session['racha_aciertos'] = 0
