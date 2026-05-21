@@ -1,5 +1,4 @@
-DROP DATABASE IF EXISTS sistema_evaluacion;
-CREATE DATABASE sistema_evaluacion;
+CREATE DATABASE IF NOT EXISTS Esistema_evaluacion;
 USE sistema_evaluacion;
 
 CREATE TABLE Tema (
@@ -20,8 +19,20 @@ CREATE TABLE Pregunta (
     FOREIGN KEY (id_tema) REFERENCES Tema(id_tema) ON DELETE CASCADE
 );
 
+CREATE TABLE ResultadoEvaluacion (
+    id_resultado INT AUTO_INCREMENT PRIMARY KEY,
+    puntaje_total INT NOT NULL,
+    porcentaje DECIMAL(5,2) NOT NULL,
+    desglose_temas JSON NOT NULL,
+    comentario_final TEXT NOT NULL,
+    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 INSERT INTO Tema (nombre, orden) VALUES 
 ('Fundamentos de Programación', 1), ('Bases de Datos', 2), ('Desarrollo Web', 3);
+
+
 
 TRUNCATE TABLE Pregunta;
 

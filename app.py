@@ -10,9 +10,11 @@
 ## Autores: Alberto Blancas Parra
 ##          David Moreno Razo
 
+import random
 from flask import Flask, jsonify, request, session, render_template
 import mysql.connector
 import json
+
 
 app = Flask(__name__)
 app.secret_key = 'clave_secreta_prototipo'
@@ -66,77 +68,95 @@ def obtener_ruta_aprendizaje():
 
 @app.route('/api/start', methods=['POST'])
 def start_exam():
-    temas = obtener_ruta_aprendizaje()
-    if not temas:
-        return jsonify({"error": "Sin temas en DB"}), 500
+    # 1. Limpiar sesión: CRÍTICO para evitar que variables viejas rompan el sistema
+    session.clear() 
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM Tema")
+    temas = cursor.fetchall()
+    cursor.close()
+    conn.close()
 
-    session['preguntas_totales'] = 0
+    # 2. Mezclar el orden de los temas (módulos aleatorios)
+    random.shuffle(temas)
+
+    # 3. Inicialización limpia
     session['temas_ruta'] = temas
     session['tema_actual_idx'] = 0
     session['dificultad_actual'] = 'basico'
-    session['racha_aciertos'] = 0
-    session['preguntas_ronda'] = 0
-    session['calificacion_acumulada'] = 0
     session['preguntas_vistas'] = [] 
 
-    return jsonify({
-        "status": "Examen iniciado", 
-        "tema_inicial": temas[0]['nombre']
-    })
+    session['calificacion_acumulada'] = 0
+    session['preguntas_totales'] = 0
+    session['racha_aciertos'] = 0
+    session['preguntas_ronda'] = 0
+    session['metricas_tema'] = {tema['nombre']: {'correctas': 0, 'incorrectas': 0} for tema in temas}
+
+    return jsonify({"status": "inicializado"})
 
 @app.route('/api/next_question', methods=['GET'])
 def get_next_question():
-    if session.get('preguntas_totales', 0) >= 30:
+    temas_ruta = session.get('temas_ruta', [])
+    tema_idx = session.get('tema_actual_idx', 0)
+
+    # 1. Validación de fin de examen (usando idx, no la variable vieja)
+    if tema_idx >= len(temas_ruta):
         return generar_diagnostico_final()
 
-    temas = session.get('temas_ruta')
-    idx_actual = session.get('tema_actual_idx')
-    
-    if idx_actual >= len(temas):
-        return generar_diagnostico_final() 
-
-    tema_actual = temas[idx_actual]
-    dificultad = session.get('dificultad_actual')
+    tema_actual = temas_ruta[tema_idx]
+    id_tema = tema_actual['id_tema']
+    dificultad = session.get('dificultad_actual', 'basico')
     vistas = session.get('preguntas_vistas', [])
 
+    # 2. Extracción de pregunta aleatoria sin repetir
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
     if vistas:
         format_strings = ','.join(['%s'] * len(vistas))
-        query = f"""
-            SELECT id_pregunta, contexto, texto_pregunta, opciones, respuesta_correcta, feedback 
-            FROM Pregunta 
-            WHERE id_tema = %s AND nivel_dificultad = %s AND id_pregunta NOT IN ({format_strings})
-            ORDER BY RAND() LIMIT 1
-        """
-        parametros = (tema_actual['id_tema'], dificultad) + tuple(vistas)
+        query = f"SELECT * FROM Pregunta WHERE id_tema = %s AND nivel_dificultad = %s AND id_pregunta NOT IN ({format_strings}) ORDER BY RAND() LIMIT 1"
+        params = [id_tema, dificultad] + vistas
+        cursor.execute(query, tuple(params))
     else:
-        query = """
-            SELECT id_pregunta, contexto, texto_pregunta, opciones, respuesta_correcta, feedback 
-            FROM Pregunta 
-            WHERE id_tema = %s AND nivel_dificultad = %s 
-            ORDER BY RAND() LIMIT 1
-        """
-        parametros = (tema_actual['id_tema'], dificultad)
+        query = "SELECT * FROM Pregunta WHERE id_tema = %s AND nivel_dificultad = %s ORDER BY RAND() LIMIT 1"
+        cursor.execute(query, (id_tema, dificultad))
 
-    cursor.execute(query, parametros)
     pregunta = cursor.fetchone()
     cursor.close()
     conn.close()
 
+    # 3. Excepción de seguridad: Si el banco se queda sin preguntas, fuerza el avance al siguiente tema
     if not pregunta:
-        return jsonify({"error": "Sin preguntas disponibles"}), 404
+        session['tema_actual_idx'] += 1
+        session['racha_aciertos'] = 0
+        session['preguntas_ronda'] = 0
+        session['dificultad_actual'] = 'basico'
+        return get_next_question() # Llamada recursiva para traer la del nuevo tema
 
+    # 4. Registrar la pregunta como vista
     vistas.append(pregunta['id_pregunta'])
     session['preguntas_vistas'] = vistas
-    opciones = json.loads(pregunta['opciones']) if isinstance(pregunta['opciones'], str) else pregunta['opciones']
+    session['pregunta_actual'] = pregunta
 
-    session['pregunta_actual'] = {
-        "id": pregunta['id_pregunta'],
-        "respuesta": pregunta['respuesta_correcta'],
-        "feedback": pregunta['feedback']
-    }
+    # 5. Aleatorizar el orden de las opciones de respuesta
+    opciones = json.loads(pregunta['opciones'])
+    random.shuffle(opciones)
+
+    # 6. Cálculo de progreso global y por materia
+    racha = session.get('racha_aciertos', 0)
+    preguntas_ronda = session.get('preguntas_ronda', 0)
+    total_temas = len(temas_ruta) if temas_ruta else 3 
+
+    progreso_por_racha = (racha / 3) * 100
+    progreso_por_limite = (preguntas_ronda / 5) * 100
+    progreso_tema = min(100, max(progreso_por_racha, progreso_por_limite))
+
+    if total_temas > 0:
+        peso_por_tema = 100 / total_temas
+        progreso_global = (tema_idx * peso_por_tema) + (progreso_tema / total_temas)
+    else:
+        progreso_global = 0
 
     return jsonify({
         "tema": tema_actual['nombre'],
@@ -144,7 +164,8 @@ def get_next_question():
         "contexto": pregunta['contexto'],
         "pregunta": pregunta['texto_pregunta'],
         "opciones": opciones,
-        "progreso": f"{session['preguntas_totales']}/30"
+        "progreso_global": round(progreso_global),
+        "progreso_tema": round(progreso_tema)
     })
 
 @app.route('/api/answer', methods=['POST'])
@@ -157,16 +178,22 @@ def submit_answer():
     session['preguntas_totales'] += 1
     session['preguntas_ronda'] += 1
     
+    # Actualizar métricas del tema específico
+    tema_actual_nombre = session.get('temas_ruta')[session['tema_actual_idx']]['nombre']
     if es_correcta:
+        session['metricas_tema'][tema_actual_nombre]['correctas'] += 1
         session['racha_aciertos'] += 1
         session['calificacion_acumulada'] += 1
     else:
+        session['metricas_tema'][tema_actual_nombre]['incorrectas'] += 1
         session['racha_aciertos'] = 0
 
     estado_ronda = evaluar_reglas_agente()
 
     return jsonify({
         "correcta": es_correcta,
+        "respuesta_esperada": pregunta_actual['respuesta'], # Necesario para feedback detallado
+        "respuesta_usuario": respuesta_usuario,
         "feedback": pregunta_actual['feedback'],
         "estado_ronda": estado_ronda
     })
@@ -262,17 +289,43 @@ def generar_diagnostico_final():
     score = session.get('calificacion_acumulada', 0)
     total = session.get('preguntas_totales', 1)
     porcentaje = round((score / total) * 100, 2)
+    metricas = session.get('metricas_tema', {})
     
-    comentario = "Competente. Buen dominio práctico."
-    if porcentaje < 60:
-        comentario = "Requiere reforzamiento de conceptos."
-        
+    # Generación de diagnóstico detallado
+    areas_mejora = []
+    for tema, stats in metricas.items():
+        total_tema = stats['correctas'] + stats['incorrectas']
+        if total_tema > 0:
+            pct_tema = stats['correctas'] / total_tema
+            if pct_tema < 0.7:  # Menos del 70% requiere mejora
+                areas_mejora.append(tema)
+
+    if not areas_mejora:
+        comentario = "Sobresaliente. Demuestras un dominio práctico y sólido en todas las áreas evaluadas. No hay deficiencias críticas detectadas."
+    else:
+        comentario = f"Desempeño general del {porcentaje}%. Tienes fallas estructurales que requieren atención inmediata en las siguientes áreas: {', '.join(areas_mejora)}. Se recomienda repasar los conceptos fundamentales de estos módulos."
+
+    # Guardar resultados en BD
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO ResultadoEvaluacion (puntaje_total, porcentaje, desglose_temas, comentario_final) VALUES (%s, %s, %s, %s)",
+            (score, porcentaje, json.dumps(metricas), comentario)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        print("Error guardando métricas:", e)
+
     return jsonify({
         "status": "finalizado",
         "score": score,
         "total_preguntas": total,
         "porcentaje": porcentaje,
-        "comentario_desempeno": comentario
+        "comentario_desempeno": comentario,
+        "desglose": metricas
     })
 
 if __name__ == '__main__':

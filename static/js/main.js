@@ -42,14 +42,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderQuestion(data) {
+        const mainContent = document.getElementById('main-content');
+        mainContent.classList.remove('new-question-animate');
+        void mainContent.offsetWidth; // Trigger reflow para reiniciar animación
+        mainContent.classList.add('new-question-animate');
+
         ui.topicTitle.innerText = data.tema;
-        ui.progressBadge.innerText = data.progreso;
         
-        // Paso 1: Lógica de la barra de progreso
-        const progressParts = data.progreso.split('/');
-        const currentQ = parseInt(progressParts[0]);
-        const totalQ = parseInt(progressParts[1]) || 30;
-        document.getElementById('progress-fill').style.width = `${(currentQ / totalQ) * 100}%`;
+        // Actualización de los badges con los porcentajes reales
+        document.getElementById('topic-progress-badge').innerText = `Materia: ${data.progreso_tema}%`;
+        ui.progressBadge.innerText = `Global: ${data.progreso_global}%`;
+        
+        // La barra de progreso principal ahora refleja el avance global adaptativo
+        document.getElementById('progress-fill').style.width = `${data.progreso_global}%`;
         
         ui.diffBadge.innerText = `Nivel: ${data.dificultad.toUpperCase()}`;
         ui.diffBadge.className = `diff-badge diff-${data.dificultad}`;
@@ -58,6 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ui.contextBox.innerText = data.contexto;
         ui.questionText.innerText = data.pregunta;
 
+        ui.optionsGrid.innerHTML = ''; // Limpiar grid
         data.opciones.forEach(opcion => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
@@ -85,13 +91,22 @@ document.addEventListener("DOMContentLoaded", () => {
             btnSelected.classList.add(data.correcta ? 'selected-correct' : 'selected-error');
             
             ui.feedbackPanel.className = `feedback-panel ${data.correcta ? 'correct' : 'error'}`;
-            ui.feedbackPanel.innerHTML = `
-                <strong>${data.correcta ? 'Respuesta Correcta' : 'Respuesta Incorrecta'}</strong><br><br>
-                ${data.feedback}
-            `;
+            
+            // Construcción de feedback detallado
+            if (data.correcta) {
+                ui.feedbackPanel.innerHTML = `<strong>¡Correcto!</strong><br><br>${data.feedback}`;
+            } else {
+                ui.feedbackPanel.innerHTML = `
+                    <strong>Respuesta Incorrecta</strong><br><br>
+                    <span style="color: #64748b; font-size: 0.9em;">Tu selección: <del>${data.respuesta_usuario}</del></span><br>
+                    <span style="color: #166534; font-size: 0.9em; font-weight: 600;">Respuesta esperada: ${data.respuesta_esperada}</span><br><br>
+                    <strong>Explicación técnica:</strong> ${data.feedback}
+                `;
+            }
             ui.feedbackPanel.style.display = 'block';
 
             ui.nextBtn.style.display = 'block';
+            ui.nextBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             ui.nextBtn.onclick = fetchNextQuestion;
         });
     }
@@ -148,12 +163,25 @@ document.addEventListener("DOMContentLoaded", () => {
             doc.text(`- Aciertos: ${correctas}`, 25, 90);
             doc.text(`- Errores: ${incorrectas}`, 25, 100);
 
+            // Inyección de métricas por materia
             doc.setFont("helvetica", "bold");
-            doc.text("Dictamen del Agente Tutor:", 20, 120);
+            doc.text("Desglose Analítico por Materia:", 20, 120);
+            doc.setFont("helvetica", "normal");
             
+            let yPosition = 130;
+            for (const [tema, stats] of Object.entries(data.desglose)) {
+                let totalTema = stats.correctas + stats.incorrectas;
+                let porcentajeTema = totalTema > 0 ? Math.round((stats.correctas / totalTema) * 100) : 0;
+                doc.text(`• ${tema}: ${porcentajeTema}% (${stats.correctas} aciertos, ${stats.incorrectas} errores)`, 25, yPosition);
+                yPosition += 10;
+            }
+
+            doc.setFont("helvetica", "bold");
+            doc.text("Dictamen del Agente Tutor:", 20, yPosition + 10);
             doc.setFont("helvetica", "italic");
+            
             const splitText = doc.splitTextToSize(data.comentario_desempeno, 160);
-            doc.text(splitText, 25, 130);
+            doc.text(splitText, 25, yPosition + 20);
 
             doc.save("Resultado_Evaluacion_Tutor.pdf");
         };
